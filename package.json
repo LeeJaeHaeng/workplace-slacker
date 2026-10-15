@@ -3,7 +3,7 @@
   "displayName": "VScodetube",
   "description": "Explorer 사이드바에서 YouTube를 검색하고 보면서 코딩",
   "publisher": "leejaehaeng",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "icon": "media/icon.png",
   "galleryBanner": {

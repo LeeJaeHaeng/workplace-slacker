@@ -141,6 +141,12 @@ const PAUSE_ONCE_SCRIPT = `(() => {
   tick();
 })();`;
 
+/** 동시에 쓸 수 있는 프로필 수 (VS Code 창 수) */
+const MAX_PROFILES = 8;
+
+/** 같은 프로필을 다른 브라우저가 이미 쓰고 있어 바로 종료됨 */
+class ProfileInUse extends Error {}
+
 export class Mirror implements vscode.Disposable {
 	private proc?: ChildProcess;
 	private cdp?: Cdp;
@@ -289,8 +295,25 @@ export class Mirror implements vscode.Disposable {
 		if (!browser) {
 			throw new Error('Chrome 또는 Edge를 찾지 못했어요. 설정 vscodetube.browserPath를 지정해 주세요.');
 		}
-		// 브라우저마다 프로필 분리 (Edge/Chrome 프로필 혼용 방지)
-		const profile = `${this.profileDir}-${path.parse(browser).name}`;
+		// 브라우저마다 프로필 분리 (Edge/Chrome 프로필 혼용 방지).
+		// 다른 VS Code 창이 같은 프로필을 쓰고 있으면 브라우저가 바로 종료되므로 다음 프로필로 재시도
+		const base = `${this.profileDir}-${path.parse(browser).name}`;
+		for (let slot = 1; slot <= MAX_PROFILES; slot++) {
+			const profile = slot === 1 ? base : `${base}-${slot}`;
+			try {
+				await this.launch(browser, profile);
+				return;
+			} catch (err) {
+				if (!(err instanceof ProfileInUse)) {
+					throw err;
+				}
+				this.log.info(`프로필 사용 중(다른 VS Code 창): ${path.basename(profile)} → 다음 프로필`);
+			}
+		}
+		throw new Error('브라우저를 실행하지 못했어요. 다른 VS Code 창에서 VScodetube를 너무 많이 쓰고 있어요.');
+	}
+
+	private async launch(browser: string, profile: string): Promise<void> {
 		fs.mkdirSync(profile, { recursive: true });
 		const proc = spawn(browser, [
 			'--headless=new',
@@ -312,6 +335,7 @@ export class Mirror implements vscode.Disposable {
 		proc.stderr?.on('data', (d: Buffer) => (stderrTail = (stderrTail + d.toString()).slice(-4000)));
 		this.proc = proc;
 		this.frames = 0;
+		let connected = false;
 		proc.on('exit', (code, signal) => {
 			this.log.info(`브라우저 종료 (code=${code}, signal=${signal})`);
 			if (this.frames === 0 && stderrTail) {
@@ -319,7 +343,10 @@ export class Mirror implements vscode.Disposable {
 			}
 			if (this.proc === proc) {
 				this.reset();
-				this.onClosed();
+				// 연결 전 종료는 launch()가 처리 (프로필 재시도)
+				if (connected) {
+					this.onClosed();
+				}
 			}
 		});
 		await new Promise<void>((resolve, reject) => {
@@ -328,10 +355,24 @@ export class Mirror implements vscode.Disposable {
 		});
 		this.log.info(`브라우저 실행 pid=${proc.pid}`);
 
-		this.cdp = new Cdp(proc.stdio[3] as Writable, proc.stdio[4] as Readable, (m, p, s) => this.onEvent(m, p, s));
-		const { userAgent, product } = await this.cdp.send('Browser.getVersion');
-		const targetId = await this.waitForPage();
-		const { sessionId } = await this.cdp.send('Target.attachToTarget', { targetId, flatten: true });
+		let userAgent: string, product: string, sessionId: string;
+		try {
+			this.cdp = new Cdp(proc.stdio[3] as Writable, proc.stdio[4] as Readable, (m, p, s) => this.onEvent(m, p, s));
+			({ userAgent, product } = await this.cdp.send('Browser.getVersion'));
+			const targetId = await this.waitForPage();
+			({ sessionId } = await this.cdp.send('Target.attachToTarget', { targetId, flatten: true }));
+		} catch (err) {
+			// 파이프가 먼저 끊길 수 있어 종료 이벤트를 잠깐 기다림
+			if (proc.exitCode === null && proc.signalCode === null) {
+				await Promise.race([new Promise(r => proc.once('exit', r)), new Promise(r => setTimeout(r, 1000))]);
+			}
+			// 연결 전에 브라우저가 종료됨 = 같은 프로필을 쓰는 브라우저가 이미 있음
+			if (proc.exitCode !== null) {
+				throw new ProfileInUse();
+			}
+			throw err;
+		}
+		connected = true;
 		this.session = sessionId;
 		this.log.info(`페이지 연결됨 (${product})`);
 		await this.send('Page.enable');
