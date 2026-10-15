@@ -12,6 +12,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](src)
 [![Runtime deps](https://img.shields.io/badge/런타임_의존성-0개-2ea44f?style=flat-square)](package.json)
 [![Needs Chrome](https://img.shields.io/badge/필요-Chrome_또는_Edge-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](#설치)
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/leejaehaeng.vscodetube?style=flat-square&label=Marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=leejaehaeng.vscodetube)
 [![Productivity](https://img.shields.io/badge/생산성-100%25_(체감)-ff0033?style=flat-square&logo=youtube&logoColor=white)](#면책-조항)
 
 [이게 뭔가요](#이게-뭔가요) · [설치](#설치) · [사용법](#사용법) · [설정](#설정) · [어떻게 동작하나요](#어떻게-동작하나요) · [삽질 연대기](#삽질-연대기) · [FAQ](#faq)
@@ -48,9 +49,24 @@ VS Code의 **Explorer 사이드바 하단**(Outline · Timeline 옆)에 **YouTub
 
 ## 설치
 
-아직 마켓플레이스에는 없습니다. 직접 빌드해서 설치하세요. 3분이면 됩니다(유튜브 한 편보다 짧음).
+**준비물:** VS Code 1.140 이상 + **Chrome 또는 Edge** (재생을 맡습니다)
 
-**준비물:** Node.js 22 이상, VS Code 1.140 이상, **Chrome 또는 Edge**(재생을 맡습니다)
+### 방법 1. VS Code 마켓플레이스 (추천, 10초 컷)
+
+[![Install from VS Code Marketplace](https://img.shields.io/badge/VS_Code_Marketplace-설치하기-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://marketplace.visualstudio.com/items?itemName=leejaehaeng.vscodetube)
+
+- VS Code 확장 탭(`Ctrl+Shift+X`)에서 **`VScodetube`** 를 검색하고 **설치**를 누르세요.
+- 또는 터미널에서 한 줄로 설치할 수 있어요.
+
+```bash
+code --install-extension leejaehaeng.vscodetube
+```
+
+설치가 끝나면 Explorer 맨 아래에 **YOUTUBE** 섹션이 생깁니다. 안 보이면 `Ctrl+Shift+P` → `Developer: Reload Window`를 실행하세요.
+
+### 방법 2. 소스에서 직접 빌드
+
+코드를 고쳐 보고 싶은 분께 추천해요. 3분이면 됩니다(유튜브 한 편보다 짧음). Node.js 22 이상이 필요해요.
 
 ```bash
 git clone https://github.com/LeeJaeHaeng/workplace-slacker.git
@@ -59,8 +75,6 @@ npm install
 npx @vscode/vsce package
 code --install-extension vscodetube-0.0.1.vsix
 ```
-
-설치한 뒤 VS Code에서 `Ctrl+Shift+P` → `Developer: Reload Window`를 실행하면 Explorer 맨 아래에 **YOUTUBE** 섹션이 생깁니다.
 
 ## 사용법
 
