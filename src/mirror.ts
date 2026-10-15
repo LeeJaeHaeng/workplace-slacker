@@ -5,14 +5,15 @@ import { Readable, Writable } from 'stream';
 import * as vscode from 'vscode';
 
 // VS Code 웹뷰는 Opus 오디오를 지원한다고 보고하지만 실제로는 디코딩하지 못해 YouTube 재생이 멈춘다.
-// 그래서 시스템 Edge/Chrome을 headless로 띄워 공식 플레이어를 재생하고(소리도 브라우저에서 출력),
+// 그래서 시스템 Chrome/Edge를 headless로 띄워 YouTube 사이트를 그대로 열고(소리도 브라우저에서 출력),
 // DevTools Protocol 스크린캐스트로 화면을 사이드바에 비추며 입력을 되돌려 보낸다.
 
 /** 웹뷰에서 전달되는 입력 이벤트 (좌표는 화면 영역 기준 CSS px) */
 export type MirrorInput =
 	| { kind: 'mouse'; type: 'mousePressed' | 'mouseReleased' | 'mouseMoved'; x: number; y: number; button: 'left' | 'right' | 'middle' | 'none'; clickCount: number }
 	| { kind: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
-	| { kind: 'key'; type: 'keyDown' | 'keyUp'; key: string; code: string; keyCode: number; text?: string };
+	| { kind: 'key'; type: 'keyDown' | 'keyUp'; key: string; code: string; keyCode: number; text?: string }
+	| { kind: 'text'; text: string };
 
 export interface MirrorSize { width: number; height: number; dpr: number }
 
@@ -78,34 +79,74 @@ class Cdp {
 	}
 }
 
+// 모든 YouTube 페이지에 주입: 유료 광고 포함 표시 숨김
+const INJECT_CSS = `
+.ytp-paid-content-overlay, .ytp-paid-content-overlay-link, ytd-paid-content-overlay-renderer,
+ytm-paid-content-overlay-renderer { display: none !important; }
+`;
+const INJECT_SCRIPT = `(() => {
+  const add = () => {
+    if (document.getElementById('vscodetube-style')) return;
+    const s = document.createElement('style');
+    s.id = 'vscodetube-style';
+    s.textContent = ${JSON.stringify(INJECT_CSS)};
+    (document.head || document.documentElement).appendChild(s);
+  };
+  if (document.documentElement) add();
+  document.addEventListener('DOMContentLoaded', add);
+})();`;
+
+// 곧 재생되는 영상을 한 번만 일시정지 (자동 재생 끄기/복원용)
+const PAUSE_ONCE_SCRIPT = `(() => {
+  const until = Date.now() + 15000;
+  const tick = () => {
+    const v = document.querySelector('video');
+    if (v && !v.paused) { v.pause(); return; }
+    if (Date.now() < until) setTimeout(tick, 200);
+  };
+  tick();
+})();`;
+
 export class Mirror implements vscode.Disposable {
 	private proc?: ChildProcess;
 	private cdp?: Cdp;
 	private session?: string;
 	private starting?: Promise<void>;
-	private size: MirrorSize = { width: 480, height: 270, dpr: 1 };
+	private size: MirrorSize = { width: 400, height: 600, dpr: 1 };
 	private casting = false;
 	private visible = true;
 	private frames = 0;
+	private dark = true;
+	private loadWaiters: (() => void)[] = [];
 
 	constructor(
-		private readonly port: number,
 		private readonly profileDir: string,
 		private readonly onFrame: (jpegBase64: string) => void,
+		private readonly onUrl: (url: string) => void,
 		private readonly onClosed: () => void,
 		private readonly log: vscode.LogOutputChannel,
 	) {}
 
-	/** 영상 열기: 브라우저가 없으면 띄우고, 있으면 페이지만 이동 */
-	async open(id: string, autoplay: boolean): Promise<void> {
-		// 서버는 127.0.0.1에 바인드하지만 IP Referer는 일부 영상에서 거부되므로 localhost 사용
-		const url = `http://localhost:${this.port}/player?v=${id}&autoplay=${autoplay ? 1 : 0}`;
-		if (this.session) {
-			await this.send('Page.navigate', { url });
-			return;
+	get running(): boolean {
+		return !!this.proc;
+	}
+
+	/** 페이지 열기: 브라우저가 없으면 띄우고 이동. pause면 첫 재생을 멈춤 */
+	async open(url: string, pause = false): Promise<void> {
+		if (!this.session) {
+			this.starting ??= this.start().finally(() => (this.starting = undefined));
+			await this.starting;
 		}
-		this.starting ??= this.start(url).finally(() => (this.starting = undefined));
-		await this.starting;
+		const loaded = this.waitLoad();
+		await this.send('Page.navigate', { url });
+		if (pause) {
+			await loaded;
+			await this.send('Runtime.evaluate', { expression: PAUSE_ONCE_SCRIPT });
+		}
+	}
+
+	async back(): Promise<void> {
+		await this.send('Runtime.evaluate', { expression: 'history.back()' });
 	}
 
 	async resize(size: MirrorSize): Promise<void> {
@@ -119,6 +160,14 @@ export class Mirror implements vscode.Disposable {
 		if (this.casting) {
 			await this.restartCast();
 		}
+	}
+
+	/** VS Code 테마에 맞춰 YouTube 다크/라이트 */
+	async setDark(dark: boolean): Promise<void> {
+		this.dark = dark;
+		await this.send('Emulation.setEmulatedMedia', {
+			features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }],
+		});
 	}
 
 	/** 사이드바가 안 보이면 프레임 전송만 멈춤 (재생은 계속) */
@@ -136,9 +185,6 @@ export class Mirror implements vscode.Disposable {
 	}
 
 	async input(ev: MirrorInput): Promise<void> {
-		if (!this.session) {
-			return;
-		}
 		if (ev.kind === 'mouse') {
 			await this.send('Input.dispatchMouseEvent', {
 				type: ev.type, x: ev.x, y: ev.y, button: ev.button, clickCount: ev.clickCount,
@@ -147,9 +193,11 @@ export class Mirror implements vscode.Disposable {
 			await this.send('Input.dispatchMouseEvent', {
 				type: 'mouseWheel', x: ev.x, y: ev.y, deltaX: ev.deltaX, deltaY: ev.deltaY,
 			});
+		} else if (ev.kind === 'text') {
+			await this.send('Input.insertText', { text: ev.text });
 		} else {
 			await this.send('Input.dispatchKeyEvent', {
-				type: ev.text && ev.type === 'keyDown' ? 'keyDown' : ev.type === 'keyDown' ? 'rawKeyDown' : 'keyUp',
+				type: ev.type === 'keyUp' ? 'keyUp' : ev.text ? 'keyDown' : 'rawKeyDown',
 				key: ev.key, code: ev.code, windowsVirtualKeyCode: ev.keyCode, text: ev.text,
 			});
 		}
@@ -165,7 +213,7 @@ export class Mirror implements vscode.Disposable {
 		this.close();
 	}
 
-	private async start(url: string): Promise<void> {
+	private async start(): Promise<void> {
 		const browser = findBrowser();
 		this.log.info(`브라우저: ${browser ?? '(없음)'}`);
 		if (!browser) {
@@ -180,11 +228,12 @@ export class Mirror implements vscode.Disposable {
 			`--user-data-dir=${profile}`,
 			`--window-size=${this.size.width},${this.size.height}`,
 			'--autoplay-policy=no-user-gesture-required',
+			'--hide-scrollbars',
 			'--no-first-run',
-			'--enable-logging=stderr',
 			'--no-default-browser-check',
+			'--enable-logging=stderr',
 			`--lang=${vscode.env.language}`,
-			url,
+			'about:blank',
 		], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], env: browserEnv() });
 		// 브라우저 로그는 마지막 일부만 보관 (파이프가 차서 멈추지 않도록 항상 읽음)
 		let stderrTail = '';
@@ -194,27 +243,33 @@ export class Mirror implements vscode.Disposable {
 		proc.on('exit', (code, signal) => {
 			this.log.info(`브라우저 종료 (code=${code}, signal=${signal})`);
 			if (this.frames === 0 && stderrTail) {
-				this.log.warn(`브라우저 출력:
-${stderrTail}`);
+				this.log.warn(`브라우저 출력:\n${stderrTail}`);
 			}
 			if (this.proc === proc) {
 				this.reset();
 				this.onClosed();
 			}
 		});
-		const spawned = new Promise<void>((resolve, reject) => {
+		await new Promise<void>((resolve, reject) => {
 			proc.once('spawn', resolve);
 			proc.once('error', reject);
 		});
-		await spawned;
-		this.log.info(`브라우저 실행 pid=${proc.pid} ${url}`);
+		this.log.info(`브라우저 실행 pid=${proc.pid}`);
 
 		this.cdp = new Cdp(proc.stdio[3] as Writable, proc.stdio[4] as Readable, (m, p, s) => this.onEvent(m, p, s));
+		const { userAgent } = await this.cdp.send('Browser.getVersion');
 		const targetId = await this.waitForPage();
 		const { sessionId } = await this.cdp.send('Target.attachToTarget', { targetId, flatten: true });
 		this.session = sessionId;
 		this.log.info('페이지 연결됨');
 		await this.send('Page.enable');
+		// headless 표시가 있으면 YouTube가 다르게 동작할 수 있어 일반 Chrome UA 사용
+		await this.send('Emulation.setUserAgentOverride', {
+			userAgent: String(userAgent).replace('HeadlessChrome', 'Chrome'),
+			acceptLanguage: vscode.env.language,
+		});
+		await this.send('Page.addScriptToEvaluateOnNewDocument', { source: INJECT_SCRIPT });
+		await this.setDark(this.dark);
 		await this.resize(this.size);
 		if (this.visible) {
 			await this.startCast();
@@ -233,6 +288,14 @@ ${stderrTail}`);
 		throw new Error('브라우저 페이지를 찾지 못했어요.');
 	}
 
+	/** 다음 load 이벤트(최대 10초) 대기 */
+	private waitLoad(): Promise<void> {
+		return new Promise(r => {
+			this.loadWaiters.push(r);
+			setTimeout(r, 10000);
+		});
+	}
+
 	private async startCast(): Promise<void> {
 		this.casting = true;
 		await this.send('Page.startScreencast', {
@@ -248,12 +311,22 @@ ${stderrTail}`);
 	}
 
 	private onEvent(method: string, params: any, sessionId?: string): void {
-		if (method === 'Page.screencastFrame' && sessionId === this.session) {
+		if (sessionId !== this.session) {
+			return;
+		}
+		if (method === 'Page.screencastFrame') {
 			this.send('Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
 			if (this.frames++ === 0) {
 				this.log.info('첫 프레임 수신');
 			}
 			this.onFrame(params.data);
+		} else if (method === 'Page.frameNavigated' && !params.frame.parentId) {
+			this.onUrl(params.frame.url);
+		} else if (method === 'Page.navigatedWithinDocument') {
+			// YouTube는 SPA라 페이지 이동 대부분이 여기로 옴
+			this.onUrl(params.url);
+		} else if (method === 'Page.loadEventFired') {
+			this.loadWaiters.splice(0).forEach(r => r());
 		}
 	}
 
@@ -269,6 +342,7 @@ ${stderrTail}`);
 		this.cdp = undefined;
 		this.session = undefined;
 		this.casting = false;
+		this.loadWaiters.splice(0).forEach(r => r());
 	}
 }
 

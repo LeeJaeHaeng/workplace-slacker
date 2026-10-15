@@ -1,7 +1,7 @@
 {
   "name": "vscodetube",
   "displayName": "VScodetube",
-  "description": "Explorer 사이드바 하단에서 YouTube를 보면서 코딩",
+  "description": "Explorer 사이드바에서 YouTube를 검색하고 보면서 코딩",
   "publisher": "leejaehaeng",
   "version": "0.0.1",
   "engines": {
@@ -24,27 +24,47 @@
     },
     "commands": [
       {
+        "command": "vscodetube.back",
+        "title": "VScodetube: 뒤로",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "vscodetube.home",
+        "title": "VScodetube: YouTube 홈",
+        "icon": "$(home)"
+      },
+      {
         "command": "vscodetube.open",
-        "title": "VScodetube: YouTube URL 열기",
-        "icon": "$(add)"
+        "title": "VScodetube: 검색 또는 URL 열기",
+        "icon": "$(search)"
       },
       {
         "command": "vscodetube.clear",
-        "title": "VScodetube: 플레이어 비우기",
+        "title": "VScodetube: 닫기",
         "icon": "$(close)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "vscodetube.open",
+          "command": "vscodetube.back",
           "when": "view == vscodetube.player",
           "group": "navigation@1"
         },
         {
-          "command": "vscodetube.clear",
+          "command": "vscodetube.home",
           "when": "view == vscodetube.player",
           "group": "navigation@2"
+        },
+        {
+          "command": "vscodetube.open",
+          "when": "view == vscodetube.player",
+          "group": "navigation@3"
+        },
+        {
+          "command": "vscodetube.clear",
+          "when": "view == vscodetube.player",
+          "group": "navigation@4"
         }
       ]
     },
@@ -54,12 +74,12 @@
         "vscodetube.autoplay": {
           "type": "boolean",
           "default": true,
-          "description": "영상을 열 때 자동 재생"
+          "description": "검색 또는 URL 열기로 영상을 열 때 자동 재생"
         },
         "vscodetube.restoreLastVideo": {
           "type": "boolean",
           "default": true,
-          "description": "VS Code를 다시 열었을 때 마지막 영상을 복원"
+          "description": "VS Code를 다시 열었을 때 마지막으로 보던 페이지 복원 (영상은 일시정지 상태)"
         },
         "vscodetube.browserPath": {
           "type": "string",

@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { parseVideoId } from '../youtube';
+import { parseVideoId, resolveInput } from '../youtube';
 
 suite('parseVideoId', () => {
 	const ID = 'dQw4w9WgXcQ';
@@ -23,4 +23,23 @@ suite('parseVideoId', () => {
 			assert.strictEqual(parseVideoId(input), expected);
 		});
 	}
+});
+
+suite('resolveInput', () => {
+	test('영상 URL → watch', () => {
+		assert.deepStrictEqual(resolveInput('https://youtu.be/dQw4w9WgXcQ'), { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', video: true });
+	});
+	test('검색어 → results', () => {
+		assert.deepStrictEqual(resolveInput(' lofi 음악 '), { url: 'https://www.youtube.com/results?search_query=lofi%20%EC%9D%8C%EC%95%85', video: false });
+	});
+	test('11글자 소문자 단어는 검색', () => {
+		assert.deepStrictEqual(resolveInput('programming'), { url: 'https://www.youtube.com/results?search_query=programming', video: false });
+	});
+	test('YouTube 채널 주소는 그대로', () => {
+		assert.deepStrictEqual(resolveInput('https://www.youtube.com/@LofiGirl'), { url: 'https://www.youtube.com/@LofiGirl', video: false });
+	});
+	test('다른 사이트 URL / 빈 값 → undefined', () => {
+		assert.strictEqual(resolveInput('https://google.com'), undefined);
+		assert.strictEqual(resolveInput('   '), undefined);
+	});
 });
