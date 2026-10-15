@@ -73,7 +73,7 @@ git clone https://github.com/LeeJaeHaeng/workplace-slacker.git
 cd workplace-slacker
 npm install
 npx @vscode/vsce package
-code --install-extension vscodetube-0.0.1.vsix
+code --install-extension vscodetube-0.0.2.vsix   # 버전 번호는 package.json의 version
 ```
 
 ## 사용법
