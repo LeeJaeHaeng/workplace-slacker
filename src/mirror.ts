@@ -149,17 +149,31 @@ export class Mirror implements vscode.Disposable {
 		await this.send('Runtime.evaluate', { expression: 'history.back()' });
 	}
 
+	/** 사이드바 → 페이지 좌표 배율. PC 레이아웃 폭으로 렌더링하고 사이드바 크기로 축소해 보여줌 */
+	private get scale(): number {
+		const pageWidth = vscode.workspace.getConfiguration('vscodetube').get<number>('pageWidth', 1280);
+		return Math.max(1, pageWidth / this.size.width);
+	}
+
 	async resize(size: MirrorSize): Promise<void> {
 		this.size = size;
 		if (!this.session) {
 			return;
 		}
+		const s = this.scale;
 		await this.send('Emulation.setDeviceMetricsOverride', {
-			width: size.width, height: size.height, deviceScaleFactor: size.dpr, mobile: false,
+			width: Math.round(size.width * s), height: Math.round(size.height * s),
+			// 축소돼도 사이드바 실제 픽셀만큼은 선명하게
+			deviceScaleFactor: Math.max(1, size.dpr / s), mobile: false,
 		});
 		if (this.casting) {
 			await this.restartCast();
 		}
+	}
+
+	/** 설정(pageWidth) 변경 등으로 레이아웃 다시 계산 */
+	relayout(): Promise<void> {
+		return this.resize(this.size);
 	}
 
 	/** VS Code 테마에 맞춰 YouTube 다크/라이트 */
@@ -185,13 +199,14 @@ export class Mirror implements vscode.Disposable {
 	}
 
 	async input(ev: MirrorInput): Promise<void> {
+		const s = this.scale;
 		if (ev.kind === 'mouse') {
 			await this.send('Input.dispatchMouseEvent', {
-				type: ev.type, x: ev.x, y: ev.y, button: ev.button, clickCount: ev.clickCount,
+				type: ev.type, x: ev.x * s, y: ev.y * s, button: ev.button, clickCount: ev.clickCount,
 			});
 		} else if (ev.kind === 'wheel') {
 			await this.send('Input.dispatchMouseEvent', {
-				type: 'mouseWheel', x: ev.x, y: ev.y, deltaX: ev.deltaX, deltaY: ev.deltaY,
+				type: 'mouseWheel', x: ev.x * s, y: ev.y * s, deltaX: ev.deltaX * s, deltaY: ev.deltaY * s,
 			});
 		} else if (ev.kind === 'text') {
 			await this.send('Input.insertText', { text: ev.text });

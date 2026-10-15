@@ -36,6 +36,11 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 		);
 		this.disposables.push(
 			vscode.window.onDidChangeActiveColorTheme(() => this.mirror.setDark(isDarkTheme()).catch(() => {})),
+			vscode.workspace.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration('vscodetube.pageWidth')) {
+					this.mirror.relayout().catch(() => {});
+				}
+			}),
 		);
 		this.mirror.setDark(isDarkTheme()).catch(() => {});
 	}

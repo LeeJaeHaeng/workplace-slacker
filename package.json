@@ -85,6 +85,13 @@
           "type": "string",
           "default": "",
           "description": "재생에 사용할 Chromium 계열 브라우저(Chrome/Edge) 실행 파일 경로. 비우면 Chrome → Edge 순으로 자동 탐색"
+        },
+        "vscodetube.pageWidth": {
+          "type": "number",
+          "default": 1280,
+          "minimum": 320,
+          "maximum": 2560,
+          "description": "YouTube를 렌더링할 PC 화면 폭(px). 사이드바 크기에 맞춰 비율 그대로 축소해 보여줍니다."
         }
       }
     }
