@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { parseVideoId, VIDEO_ID_RE } from './youtube';
 
 const LAST_VIDEO_KEY = 'lastVideo';
+// IP(127.0.0.1) Referer는 일부 영상에서 YouTube가 거부하므로 호스트명 사용 (서버 바인드는 127.0.0.1 유지)
+const PLAYER_HOST = 'localhost';
 
 export class PlayerViewProvider implements vscode.WebviewViewProvider {
 	static readonly viewId = 'vscodetube.player';
@@ -60,7 +62,7 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider {
 
 	private playerUrl(id: string): string {
 		const autoplay = config().get<boolean>('autoplay', true);
-		return `http://127.0.0.1:${this.port}/player?v=${id}&autoplay=${autoplay ? 1 : 0}`;
+		return `http://${PLAYER_HOST}:${this.port}/player?v=${id}&autoplay=${autoplay ? 1 : 0}`;
 	}
 
 	private getHtml(): string {
@@ -70,10 +72,10 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider {
 		const noVideo = src ? ' hidden' : '';
 		return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src http://127.0.0.1:${this.port}; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src http://${PLAYER_HOST}:${this.port}; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>
 body{margin:0;padding:4px}
-iframe{width:100%;aspect-ratio:16/9;border:0;background:#000}
+iframe{display:block;width:100%;aspect-ratio:16/9;border:0;background:#000}
 #empty{color:var(--vscode-descriptionForeground);padding:4px}
 </style>
 </head><body>
