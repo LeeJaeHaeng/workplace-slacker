@@ -56,7 +56,7 @@ VS Code의 **Explorer 사이드바 하단**(Outline · Timeline 옆)에 **YouTub
 git clone https://github.com/LeeJaeHaeng/workplace-slacker.git
 cd workplace-slacker
 npm install
-npx @vscode/vsce package --skip-license
+npx @vscode/vsce package
 code --install-extension vscodetube-0.0.1.vsix
 ```
 
@@ -87,6 +87,7 @@ code --install-extension vscodetube-0.0.1.vsix
 | `vscodetube.autoFullscreen` | `true` | 영상을 열면 플레이어로 섹션을 꽉 채움 |
 | `vscodetube.restoreLastVideo` | `true` | VS Code를 다시 열면 마지막 페이지 복원 (영상은 일시정지) |
 | `vscodetube.pageWidth` | `1280` | YouTube를 렌더링할 PC 화면 폭. 줄이면 글자가 커지고, 너무 줄이면 모바일 같은 레이아웃이 됨 |
+| `vscodetube.hidePaidPromotion` | `true` | 영상 위 "유료 광고 포함" 안내 숨김 (브라우저를 다시 열면 적용) |
 | `vscodetube.browserPath` | `""` | 재생용 브라우저 경로. 비우면 Chrome → Edge 순으로 자동 탐색 |
 
 ## 어떻게 동작하나요
@@ -224,6 +225,10 @@ npm test          # 단위 테스트 (VS Code 테스트 인스턴스에서 실�
 ```
 
 `F5`로 Extension Development Host를 띄워 디버깅할 수 있습니다. 설계 초안은 [`VScodetube_IMPLEMENTATION_PLAN.md`](VScodetube_IMPLEMENTATION_PLAN.md)에 있어요. 초안의 "로컬 서버 + 이중 iframe" 구조는 [삽질 연대기](#삽질-연대기)를 거치면서 지금의 미러링 구조로 바뀌었습니다.
+
+## 라이선스
+
+[MIT](LICENSE)
 
 ## 면책 조항
 

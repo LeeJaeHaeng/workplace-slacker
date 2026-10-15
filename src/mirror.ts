@@ -94,9 +94,10 @@ html, body { overflow: hidden !important; }
   z-index: 2147483647 !important; background: #000 !important;
 }
 `;
-const INJECT_SCRIPT = `(() => {
+/** hidePaid: 유료 광고 포함 표시 숨김 여부 (설정 vscodetube.hidePaidPromotion) */
+const injectScript = (hidePaid: boolean) => `(() => {
   const base = new CSSStyleSheet();
-  base.replaceSync(${JSON.stringify(BASE_CSS)});
+  base.replaceSync(${JSON.stringify(hidePaid ? BASE_CSS : '')});
   const fill = new CSSStyleSheet();
   let filled = false;
   const ensure = () => {
@@ -342,7 +343,8 @@ export class Mirror implements vscode.Disposable {
 		});
 		await this.send('Runtime.enable');
 		await this.send('Runtime.addBinding', { name: 'vscodetubeFill' });
-		await this.send('Page.addScriptToEvaluateOnNewDocument', { source: INJECT_SCRIPT });
+		const hidePaid = vscode.workspace.getConfiguration('vscodetube').get<boolean>('hidePaidPromotion', true);
+		await this.send('Page.addScriptToEvaluateOnNewDocument', { source: injectScript(hidePaid) });
 		await this.setDark(this.dark);
 		await this.resize(this.size);
 		if (this.visible) {

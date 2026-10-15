@@ -4,6 +4,12 @@
   "description": "Explorer 사이드바에서 YouTube를 검색하고 보면서 코딩",
   "publisher": "leejaehaeng",
   "version": "0.0.1",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/LeeJaeHaeng/workplace-slacker.git"
@@ -13,6 +19,16 @@
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "youtube",
+    "video",
+    "player",
+    "music",
+    "lofi",
+    "sidebar",
+    "explorer",
+    "유튜브"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
@@ -111,6 +127,11 @@
           "type": "boolean",
           "default": true,
           "description": "영상을 열면 플레이어를 섹션 크기에 꽉 채움 (Esc 또는 더블클릭으로 해제)"
+        },
+        "vscodetube.hidePaidPromotion": {
+          "type": "boolean",
+          "default": true,
+          "description": "영상 위 \"유료 광고 포함\" 안내 표시 숨김 (브라우저를 다시 열면 적용)"
         }
       }
     }
