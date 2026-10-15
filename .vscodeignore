@@ -13,3 +13,4 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 VScodetube_IMPLEMENTATION_PLAN.md
+docs/**

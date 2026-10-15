@@ -1,9 +1,19 @@
 # Change Log
 
-All notable changes to the "vscodetube" extension will be documented in this file.
+## [0.0.1] - 2026-10-15
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+첫 릴리스. 팀장님께는 비밀.
 
-## [Unreleased]
+### 추가
+- Explorer 사이드바 하단 **YouTube** 섹션
+- headless Chrome/Edge로 youtube.com(PC 버전)을 열고 화면을 사이드바에 미러링, 클릭·휠·키보드(한글 IME, `Ctrl+V`) 입력 전달
+- 영상 페이지에서 플레이어로 섹션 꽉 채우기 (`Esc`로 해제)
+- 상단 버튼: 뒤로 / 홈 / 새로고침 / 검색·URL 열기 / 닫기
+- 설정: `autoplay`, `autoFullscreen`, `restoreLastVideo`, `pageWidth`, `browserPath`
+- "유료 광고 포함" 표시 숨김, VS Code 테마에 맞춘 다크/라이트
+- 출력 패널 **VScodetube** 로그 채널
 
-- Initial release
+### 우회한 문제
+- YouTube Error 153 (웹뷰에 Referer 없음)
+- VS Code 웹뷰의 Opus 오디오 디코딩 불가 → 재생을 시스템 브라우저에 맡김
+- headless 탐지로 인한 재생 중 에러 (Client Hints, `navigator.webdriver`)

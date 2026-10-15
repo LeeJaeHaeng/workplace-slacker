@@ -4,6 +4,10 @@
   "description": "Explorer 사이드바에서 YouTube를 검색하고 보면서 코딩",
   "publisher": "leejaehaeng",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LeeJaeHaeng/workplace-slacker.git"
+  },
   "engines": {
     "vscode": "^1.140.0"
   },
