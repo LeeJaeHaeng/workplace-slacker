@@ -73,7 +73,7 @@ git clone https://github.com/LeeJaeHaeng/workplace-slacker.git
 cd workplace-slacker
 npm install
 npx @vscode/vsce package
-code --install-extension vscodetube-0.0.2.vsix   # 버전 번호는 package.json의 version
+code --install-extension vscodetube-0.0.3.vsix   # 버전 번호는 package.json의 version
 ```
 
 ## 사용법
@@ -225,6 +225,7 @@ VS Code에 들어 있는 브라우저 엔진은 Opus 오디오를 재생하지 �
 
 ## 알려진 제한
 
+- VS Code 창은 최대 32개까지 동시에 쓸 수 있어요. 창마다 Chrome이 하나씩 떠서, 영상을 재생 중인 창 하나당 메모리를 300~500MB쯤 씁니다.
 - 재생에 **Chrome 또는 Edge**가 필요합니다.
 - 화면은 JPEG 프레임으로 비추는 방식이라 빠른 장면에서는 약간 끊겨 보일 수 있습니다(측정값 약 15fps 안팎).
 - 연령 제한처럼 로그인이 필요한 영상은 볼 수 없습니다.

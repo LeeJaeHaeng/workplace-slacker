@@ -142,7 +142,7 @@ const PAUSE_ONCE_SCRIPT = `(() => {
 })();`;
 
 /** 동시에 쓸 수 있는 프로필 수 (VS Code 창 수) */
-const MAX_PROFILES = 8;
+const MAX_PROFILES = 32;
 
 /** 같은 프로필을 다른 브라우저가 이미 쓰고 있어 바로 종료됨 */
 class ProfileInUse extends Error {}
