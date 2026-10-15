@@ -169,24 +169,34 @@ export class Mirror implements vscode.Disposable {
 		const browser = findBrowser();
 		this.log.info(`브라우저: ${browser ?? '(없음)'}`);
 		if (!browser) {
-			throw new Error('Edge 또는 Chrome을 찾지 못했어요. 설정 vscodetube.browserPath를 지정해 주세요.');
+			throw new Error('Chrome 또는 Edge를 찾지 못했어요. 설정 vscodetube.browserPath를 지정해 주세요.');
 		}
-		fs.mkdirSync(this.profileDir, { recursive: true });
+		// 브라우저마다 프로필 분리 (Edge/Chrome 프로필 혼용 방지)
+		const profile = `${this.profileDir}-${path.parse(browser).name}`;
+		fs.mkdirSync(profile, { recursive: true });
 		const proc = spawn(browser, [
 			'--headless=new',
 			'--remote-debugging-pipe',
-			`--user-data-dir=${this.profileDir}`,
+			`--user-data-dir=${profile}`,
 			`--window-size=${this.size.width},${this.size.height}`,
 			'--autoplay-policy=no-user-gesture-required',
 			'--no-first-run',
+			'--enable-logging=stderr',
 			'--no-default-browser-check',
 			`--lang=${vscode.env.language}`,
 			url,
-		], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
+		], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], env: browserEnv() });
+		// 브라우저 로그는 마지막 일부만 보관 (파이프가 차서 멈추지 않도록 항상 읽음)
+		let stderrTail = '';
+		proc.stderr?.on('data', (d: Buffer) => (stderrTail = (stderrTail + d.toString()).slice(-4000)));
 		this.proc = proc;
 		this.frames = 0;
 		proc.on('exit', (code, signal) => {
 			this.log.info(`브라우저 종료 (code=${code}, signal=${signal})`);
+			if (this.frames === 0 && stderrTail) {
+				this.log.warn(`브라우저 출력:
+${stderrTail}`);
+			}
 			if (this.proc === proc) {
 				this.reset();
 				this.onClosed();
@@ -262,7 +272,14 @@ export class Mirror implements vscode.Disposable {
 	}
 }
 
-/** 설정값 → Edge → Chrome 순으로 실행 파일 탐색 */
+/** VS Code(Electron)가 물려주는 환경 변수를 빼고 브라우저 실행 */
+function browserEnv(): NodeJS.ProcessEnv {
+	return Object.fromEntries(
+		Object.entries(process.env).filter(([k]) => !/^(ELECTRON_|VSCODE_|CHROME_CRASHPAD)/i.test(k)),
+	);
+}
+
+/** 설정값 → Chrome → Edge 순으로 실행 파일 탐색 */
 function findBrowser(): string | undefined {
 	const custom = vscode.workspace.getConfiguration('vscodetube').get<string>('browserPath', '').trim();
 	if (custom) {
@@ -275,14 +292,14 @@ function candidates(): string[] {
 	if (process.platform === 'win32') {
 		const roots = [process.env['PROGRAMFILES(X86)'], process.env.PROGRAMFILES, process.env.LOCALAPPDATA]
 			.filter((r): r is string => !!r);
-		const rel = ['Microsoft\\Edge\\Application\\msedge.exe', 'Google\\Chrome\\Application\\chrome.exe'];
+		const rel = ['Google\\Chrome\\Application\\chrome.exe', 'Microsoft\\Edge\\Application\\msedge.exe'];
 		return rel.flatMap(r => roots.map(root => path.join(root, r)));
 	}
 	if (process.platform === 'darwin') {
 		return [
-			'/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
 			'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+			'/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
 		];
 	}
-	return ['/usr/bin/microsoft-edge', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+	return ['/usr/bin/google-chrome', '/usr/bin/microsoft-edge', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
 }
