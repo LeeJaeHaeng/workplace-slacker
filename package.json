@@ -34,6 +34,11 @@
         "icon": "$(home)"
       },
       {
+        "command": "vscodetube.reload",
+        "title": "VScodetube: 새로고침",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "vscodetube.open",
         "title": "VScodetube: 검색 또는 URL 열기",
         "icon": "$(search)"
@@ -57,14 +62,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "vscodetube.open",
+          "command": "vscodetube.reload",
           "when": "view == vscodetube.player",
           "group": "navigation@3"
         },
         {
-          "command": "vscodetube.clear",
+          "command": "vscodetube.open",
           "when": "view == vscodetube.player",
           "group": "navigation@4"
+        },
+        {
+          "command": "vscodetube.clear",
+          "when": "view == vscodetube.player",
+          "group": "navigation@5"
         }
       ]
     },

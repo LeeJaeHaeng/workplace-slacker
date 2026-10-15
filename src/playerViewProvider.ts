@@ -77,6 +77,14 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 		return this.open(YOUTUBE_HOME);
 	}
 
+	async reload(): Promise<void> {
+		if (this.mirror.running) {
+			await this.mirror.reload().catch(() => {});
+		} else {
+			await this.home();
+		}
+	}
+
 	async back(): Promise<void> {
 		await this.mirror.back().catch(() => {});
 	}

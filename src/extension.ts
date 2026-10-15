@@ -22,6 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('vscodetube.back', () => provider.back()),
 		vscode.commands.registerCommand('vscodetube.home', () => provider.home()),
+		vscode.commands.registerCommand('vscodetube.reload', () => provider.reload()),
 		vscode.commands.registerCommand('vscodetube.clear', () => provider.clear()),
 	);
 }

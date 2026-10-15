@@ -180,6 +180,10 @@ export class Mirror implements vscode.Disposable {
 		}
 	}
 
+	async reload(): Promise<void> {
+		await this.send('Page.reload');
+	}
+
 	async back(): Promise<void> {
 		await this.send('Runtime.evaluate', { expression: 'history.back()' });
 	}
@@ -294,6 +298,8 @@ export class Mirror implements vscode.Disposable {
 			`--window-size=${this.size.width},${this.size.height}`,
 			'--autoplay-policy=no-user-gesture-required',
 			'--hide-scrollbars',
+			// navigator.webdriver=true 방지
+			'--disable-blink-features=AutomationControlled',
 			'--no-first-run',
 			'--no-default-browser-check',
 			'--enable-logging=stderr',
@@ -322,16 +328,17 @@ export class Mirror implements vscode.Disposable {
 		this.log.info(`브라우저 실행 pid=${proc.pid}`);
 
 		this.cdp = new Cdp(proc.stdio[3] as Writable, proc.stdio[4] as Readable, (m, p, s) => this.onEvent(m, p, s));
-		const { userAgent } = await this.cdp.send('Browser.getVersion');
+		const { userAgent, product } = await this.cdp.send('Browser.getVersion');
 		const targetId = await this.waitForPage();
 		const { sessionId } = await this.cdp.send('Target.attachToTarget', { targetId, flatten: true });
 		this.session = sessionId;
-		this.log.info('페이지 연결됨');
+		this.log.info(`페이지 연결됨 (${product})`);
 		await this.send('Page.enable');
-		// headless 표시가 있으면 YouTube가 다르게 동작할 수 있어 일반 Chrome UA 사용
+		// headless 흔적(UA, 빈 Client Hints)이 있으면 YouTube가 재생 중 에러를 내므로 일반 브라우저처럼 보이게 함
 		await this.send('Emulation.setUserAgentOverride', {
 			userAgent: String(userAgent).replace('HeadlessChrome', 'Chrome'),
 			acceptLanguage: vscode.env.language,
+			userAgentMetadata: uaMetadata(String(product), path.parse(browser).name),
 		});
 		await this.send('Runtime.enable');
 		await this.send('Runtime.addBinding', { name: 'vscodetubeFill' });
@@ -420,6 +427,20 @@ export class Mirror implements vscode.Disposable {
 		this.fill = false;
 		this.loadWaiters.splice(0).forEach(r => r());
 	}
+}
+
+/** 일반 브라우저와 같은 Client Hints (headless는 brands가 비어 있음) */
+function uaMetadata(product: string, exeName: string): object {
+	const full = product.split('/')[1] ?? '0.0.0.0';
+	const major = full.split('.')[0];
+	const name = /edge/i.test(exeName) ? 'Microsoft Edge' : 'Google Chrome';
+	const platform = process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux';
+	return {
+		brands: [{ brand: name, version: major }, { brand: 'Chromium', version: major }, { brand: 'Not=A?Brand', version: '24' }],
+		fullVersionList: [{ brand: name, version: full }, { brand: 'Chromium', version: full }, { brand: 'Not=A?Brand', version: '24.0.0.0' }],
+		platform, platformVersion: '', architecture: process.arch === 'arm64' ? 'arm' : 'x86', model: '', mobile: false,
+		bitness: '64', wow64: false,
+	};
 }
 
 /** VS Code(Electron)가 물려주는 환경 변수를 빼고 브라우저 실행 */
