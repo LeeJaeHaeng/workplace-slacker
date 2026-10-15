@@ -92,6 +92,11 @@
           "minimum": 320,
           "maximum": 2560,
           "description": "YouTube를 렌더링할 PC 화면 폭(px). 사이드바 크기에 맞춰 비율 그대로 축소해 보여줍니다."
+        },
+        "vscodetube.autoFullscreen": {
+          "type": "boolean",
+          "default": true,
+          "description": "영상을 열면 플레이어를 섹션 크기에 꽉 채움 (Esc 또는 더블클릭으로 해제)"
         }
       }
     }

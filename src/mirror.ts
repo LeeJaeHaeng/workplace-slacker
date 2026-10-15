@@ -79,22 +79,54 @@ class Cdp {
 	}
 }
 
-// 모든 YouTube 페이지에 주입: 유료 광고 포함 표시 숨김
-const INJECT_CSS = `
+// 모든 YouTube 페이지에 주입. YouTube가 <style>/<html> 클래스를 지우므로 adoptedStyleSheets 사용
+// - 유료 광고 포함 표시 숨김
+// - 플레이어 꽉 채우기(fill) 모드
+const BASE_CSS = `
 .ytp-paid-content-overlay, .ytp-paid-content-overlay-link, ytd-paid-content-overlay-renderer,
 ytm-paid-content-overlay-renderer { display: none !important; }
 `;
+const FILL_CSS = `
+html, body { overflow: hidden !important; }
+#movie_player {
+  position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
+  z-index: 2147483647 !important; background: #000 !important;
+}
+`;
 const INJECT_SCRIPT = `(() => {
-  const add = () => {
-    if (document.getElementById('vscodetube-style')) return;
-    const s = document.createElement('style');
-    s.id = 'vscodetube-style';
-    s.textContent = ${JSON.stringify(INJECT_CSS)};
-    (document.head || document.documentElement).appendChild(s);
+  const base = new CSSStyleSheet();
+  base.replaceSync(${JSON.stringify(BASE_CSS)});
+  const fill = new CSSStyleSheet();
+  let filled = false;
+  const ensure = () => {
+    const list = document.adoptedStyleSheets;
+    if (!list.includes(base)) document.adoptedStyleSheets = [...list, base, fill];
   };
-  if (document.documentElement) add();
-  document.addEventListener('DOMContentLoaded', add);
+  ensure();
+  document.addEventListener('DOMContentLoaded', ensure);
+
+  // fill 모드 전환: 플레이어 크기 재계산을 위해 resize 이벤트를 보내고 익스텐션에 알림
+  window.__vscodetubeFill = on => {
+    ensure();
+    if (filled === on) return;
+    filled = on;
+    fill.replaceSync(on ? ${JSON.stringify(FILL_CSS)} : '');
+    const kick = () => window.dispatchEvent(new Event('resize'));
+    kick(); requestAnimationFrame(kick); setTimeout(kick, 300);
+    try { window.vscodetubeFill(on ? '1' : '0'); } catch {}
+  };
+  // Esc로 해제, 다른 페이지로 이동하면 해제
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') window.__vscodetubeFill(false); }, true);
+  document.addEventListener('yt-navigate-start', () => window.__vscodetubeFill(false));
 })();`;
+
+// 영상 페이지면 fill 모드 켜기. 'wait'면 아직 플레이어 준비 전
+const FILL_SCRIPT = `(() => {
+  if (location.pathname !== '/watch') return 'skip';
+  if (!document.querySelector('#movie_player video') || !window.__vscodetubeFill) return 'wait';
+  window.__vscodetubeFill(true);
+  return 'done';
+})()`;
 
 // 곧 재생되는 영상을 한 번만 일시정지 (자동 재생 끄기/복원용)
 const PAUSE_ONCE_SCRIPT = `(() => {
@@ -117,12 +149,14 @@ export class Mirror implements vscode.Disposable {
 	private visible = true;
 	private frames = 0;
 	private dark = true;
+	private fill = false;
 	private loadWaiters: (() => void)[] = [];
 
 	constructor(
 		private readonly profileDir: string,
 		private readonly onFrame: (jpegBase64: string) => void,
-		private readonly onUrl: (url: string) => void,
+		/** newDocument: 새 문서 로드(새로고침 포함), false면 SPA 내부 이동 */
+		private readonly onUrl: (url: string, newDocument: boolean) => void,
 		private readonly onClosed: () => void,
 		private readonly log: vscode.LogOutputChannel,
 	) {}
@@ -149,8 +183,23 @@ export class Mirror implements vscode.Disposable {
 		await this.send('Runtime.evaluate', { expression: 'history.back()' });
 	}
 
+	/** 영상 페이지면 플레이어를 화면에 꽉 채움 (플레이어가 준비될 때까지 최대 10초 재시도) */
+	async enterFill(): Promise<void> {
+		for (let i = 0; i < 20 && this.session; i++) {
+			const r = await this.send('Runtime.evaluate', { expression: FILL_SCRIPT, returnByValue: true });
+			if (r?.result?.value !== 'wait') {
+				return;
+			}
+			await new Promise(res => setTimeout(res, 500));
+		}
+	}
+
 	/** 사이드바 → 페이지 좌표 배율. PC 레이아웃 폭으로 렌더링하고 사이드바 크기로 축소해 보여줌 */
 	private get scale(): number {
+		if (this.fill) {
+			// 꽉 채운 플레이어는 사이드바 실제 크기로 (컨트롤이 읽을 만한 크기)
+			return 1;
+		}
 		const pageWidth = vscode.workspace.getConfiguration('vscodetube').get<number>('pageWidth', 1280);
 		return Math.max(1, pageWidth / this.size.width);
 	}
@@ -283,6 +332,8 @@ export class Mirror implements vscode.Disposable {
 			userAgent: String(userAgent).replace('HeadlessChrome', 'Chrome'),
 			acceptLanguage: vscode.env.language,
 		});
+		await this.send('Runtime.enable');
+		await this.send('Runtime.addBinding', { name: 'vscodetubeFill' });
 		await this.send('Page.addScriptToEvaluateOnNewDocument', { source: INJECT_SCRIPT });
 		await this.setDark(this.dark);
 		await this.resize(this.size);
@@ -336,10 +387,18 @@ export class Mirror implements vscode.Disposable {
 			}
 			this.onFrame(params.data);
 		} else if (method === 'Page.frameNavigated' && !params.frame.parentId) {
-			this.onUrl(params.frame.url);
+			// 새 문서에선 fill 스타일이 사라지므로 상태 초기화
+			if (this.fill) {
+				this.fill = false;
+				this.relayout().catch(() => {});
+			}
+			this.onUrl(params.frame.url, true);
 		} else if (method === 'Page.navigatedWithinDocument') {
 			// YouTube는 SPA라 페이지 이동 대부분이 여기로 옴
-			this.onUrl(params.url);
+			this.onUrl(params.url, false);
+		} else if (method === 'Runtime.bindingCalled' && params.name === 'vscodetubeFill') {
+			this.fill = params.payload === '1';
+			this.relayout().catch(() => {});
 		} else if (method === 'Page.loadEventFired') {
 			this.loadWaiters.splice(0).forEach(r => r());
 		}
@@ -357,6 +416,7 @@ export class Mirror implements vscode.Disposable {
 		this.cdp = undefined;
 		this.session = undefined;
 		this.casting = false;
+		this.fill = false;
 		this.loadWaiters.splice(0).forEach(r => r());
 	}
 }

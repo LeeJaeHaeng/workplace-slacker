@@ -20,6 +20,8 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 	private view?: vscode.WebviewView;
 	private readonly mirror: Mirror;
 	private readonly disposables: vscode.Disposable[] = [];
+	/** 꽉 채우기를 이미 적용한 영상 ID (같은 문서·같은 영상에서 반복하지 않음) */
+	private fillVideo?: string;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -30,7 +32,7 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 		this.mirror = new Mirror(
 			profileDir,
 			data => this.view?.webview.postMessage({ type: 'frame', data }),
-			url => this.onUrl(url),
+			(url, newDocument) => this.onUrl(url, newDocument),
 			() => this.view?.webview.postMessage({ type: 'clear' }),
 			log,
 		);
@@ -135,10 +137,18 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 		}
 	}
 
-	private onUrl(url: string): void {
-		if (isYouTubeUrl(url)) {
-			this.context.globalState.update(LAST_URL_KEY, url);
+	private onUrl(url: string, newDocument: boolean): void {
+		if (!isYouTubeUrl(url)) {
+			return;
 		}
+		this.context.globalState.update(LAST_URL_KEY, url);
+		// 영상 페이지로 오면 플레이어를 섹션 크기로 꽉 채움
+		const u = new URL(url);
+		const id = u.pathname === '/watch' ? u.searchParams.get('v') ?? undefined : undefined;
+		if (id && (newDocument || id !== this.fillVideo) && config().get<boolean>('autoFullscreen', true)) {
+			this.mirror.enterFill().catch(() => {});
+		}
+		this.fillVideo = id;
 	}
 
 	private getHtml(): string {
