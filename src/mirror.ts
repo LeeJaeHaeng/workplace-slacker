@@ -86,12 +86,14 @@ export class Mirror implements vscode.Disposable {
 	private size: MirrorSize = { width: 480, height: 270, dpr: 1 };
 	private casting = false;
 	private visible = true;
+	private frames = 0;
 
 	constructor(
 		private readonly port: number,
 		private readonly profileDir: string,
 		private readonly onFrame: (jpegBase64: string) => void,
 		private readonly onClosed: () => void,
+		private readonly log: vscode.LogOutputChannel,
 	) {}
 
 	/** 영상 열기: 브라우저가 없으면 띄우고, 있으면 페이지만 이동 */
@@ -165,6 +167,7 @@ export class Mirror implements vscode.Disposable {
 
 	private async start(url: string): Promise<void> {
 		const browser = findBrowser();
+		this.log.info(`브라우저: ${browser ?? '(없음)'}`);
 		if (!browser) {
 			throw new Error('Edge 또는 Chrome을 찾지 못했어요. 설정 vscodetube.browserPath를 지정해 주세요.');
 		}
@@ -181,7 +184,9 @@ export class Mirror implements vscode.Disposable {
 			url,
 		], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
 		this.proc = proc;
-		proc.on('exit', () => {
+		this.frames = 0;
+		proc.on('exit', (code, signal) => {
+			this.log.info(`브라우저 종료 (code=${code}, signal=${signal})`);
 			if (this.proc === proc) {
 				this.reset();
 				this.onClosed();
@@ -192,11 +197,13 @@ export class Mirror implements vscode.Disposable {
 			proc.once('error', reject);
 		});
 		await spawned;
+		this.log.info(`브라우저 실행 pid=${proc.pid} ${url}`);
 
 		this.cdp = new Cdp(proc.stdio[3] as Writable, proc.stdio[4] as Readable, (m, p, s) => this.onEvent(m, p, s));
 		const targetId = await this.waitForPage();
 		const { sessionId } = await this.cdp.send('Target.attachToTarget', { targetId, flatten: true });
 		this.session = sessionId;
+		this.log.info('페이지 연결됨');
 		await this.send('Page.enable');
 		await this.resize(this.size);
 		if (this.visible) {
@@ -233,6 +240,9 @@ export class Mirror implements vscode.Disposable {
 	private onEvent(method: string, params: any, sessionId?: string): void {
 		if (method === 'Page.screencastFrame' && sessionId === this.session) {
 			this.send('Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
+			if (this.frames++ === 0) {
+				this.log.info('첫 프레임 수신');
+			}
 			this.onFrame(params.data);
 		}
 	}

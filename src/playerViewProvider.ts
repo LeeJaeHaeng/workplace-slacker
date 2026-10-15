@@ -25,6 +25,7 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 	constructor(
 		private readonly context: vscode.ExtensionContext,
 		port: number,
+		private readonly log: vscode.LogOutputChannel,
 	) {
 		// 미러링 전용 브라우저 프로필 (사용자 기본 프로필과 분리)
 		const profileDir = path.join(context.globalStorageUri.fsPath, 'browser-profile');
@@ -36,6 +37,7 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 				this.opened = false;
 				this.view?.webview.postMessage({ type: 'clear' });
 			},
+			log,
 		);
 
 		// 마지막 영상 복원
@@ -105,17 +107,20 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 				await this.view?.webview.postMessage({ type: 'loading' });
 				await this.open(this.videoId, autoplay);
 			}
-		} catch {
-			// 브라우저 종료 중 입력 등은 무시
+		} catch (err) {
+			// 브라우저 종료 중 입력 등은 기록만
+			this.log.debug(`${m.type} 처리 실패: ${err}`);
 		}
 	}
 
 	private async open(id: string, autoplay: boolean): Promise<void> {
+		this.log.info(`열기 ${id} (autoplay=${autoplay})`);
 		try {
 			await this.mirror.open(id, autoplay);
 			this.opened = true;
 		} catch (err) {
 			this.opened = false;
+			this.log.error(`열기 실패: ${err instanceof Error ? err.stack : err}`);
 			await this.view?.webview.postMessage({ type: 'clear' });
 			vscode.window.showErrorMessage(`VScodetube: ${err instanceof Error ? err.message : err}`);
 		}
@@ -130,18 +135,21 @@ export class PlayerViewProvider implements vscode.WebviewViewProvider, vscode.Di
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>
 body{margin:0;padding:4px}
-#screen{display:block;width:100%;aspect-ratio:16/9;background:#000;object-fit:contain;outline:none;user-select:none}
+#screen{position:relative;width:100%;aspect-ratio:16/9;background:#000;outline:none;user-select:none}
 #screen:focus-visible{outline:1px solid var(--vscode-focusBorder)}
+#frame{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+#status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px}
 #empty{color:var(--vscode-descriptionForeground);padding:4px}
 </style>
 </head><body>
-<img id="screen" tabindex="0" alt=""${hasVideo}>
+<div id="screen" tabindex="0"${hasVideo}><img id="frame" alt="" hidden><div id="status">불러오는 중…</div></div>
 <div id="empty"${noVideo}>상단 + 버튼으로 YouTube URL을 열어보세요.</div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const screen = document.getElementById('screen');
+const frame = document.getElementById('frame');
+const status = document.getElementById('status');
 const empty = document.getElementById('empty');
-const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 let size = { width: 0, height: 0 };
 
 // 화면 크기를 브라우저 뷰포트에 맞춤
@@ -157,13 +165,16 @@ new ResizeObserver(reportSize).observe(document.body);
 window.addEventListener('message', e => {
   const m = e.data;
   if (!m || typeof m !== 'object') return;
-  if (m.type === 'frame')   { screen.src = 'data:image/jpeg;base64,' + m.data; }
-  if (m.type === 'loading') { screen.src = BLANK; screen.hidden = false; empty.hidden = true; reportSize(); }
-  if (m.type === 'clear')   { screen.src = BLANK; screen.hidden = true;  empty.hidden = false; }
+  if (m.type === 'frame')   { frame.src = 'data:image/jpeg;base64,' + m.data; frame.hidden = false; status.hidden = true; }
+  if (m.type === 'loading') { frame.hidden = true; status.hidden = false; screen.hidden = false; empty.hidden = true; reportSize(); }
+  if (m.type === 'clear')   { frame.hidden = true; frame.removeAttribute('src'); screen.hidden = true; empty.hidden = false; }
 });
 
 // 입력 전달 (좌표는 화면 영역 기준 CSS px)
-const pos = e => ({ x: e.offsetX * size.width / screen.clientWidth, y: e.offsetY * size.height / screen.clientHeight });
+const pos = e => {
+  const r = screen.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * size.width / r.width, y: (e.clientY - r.top) * size.height / r.height };
+};
 const BUTTONS = ['left', 'middle', 'right'];
 const send = ev => vscode.postMessage({ type: 'input', ev });
 screen.addEventListener('mousedown', e => { screen.focus(); send({ kind: 'mouse', type: 'mousePressed', ...pos(e), button: BUTTONS[e.button] || 'left', clickCount: e.detail || 1 }); e.preventDefault(); });
