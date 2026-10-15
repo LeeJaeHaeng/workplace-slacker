@@ -88,6 +88,7 @@ ytm-paid-content-overlay-renderer { display: none !important; }
 `;
 const FILL_CSS = `
 html, body { overflow: hidden !important; }
+#masthead-container, ytd-masthead, #masthead, tp-yt-app-drawer#guide, ytd-mini-guide-renderer { display: none !important; }
 #movie_player {
   position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
   z-index: 2147483647 !important; background: #000 !important;
