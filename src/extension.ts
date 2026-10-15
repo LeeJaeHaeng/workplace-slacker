@@ -3,7 +3,7 @@ import { startPlayerServer } from './playerServer';
 import { PlayerViewProvider } from './playerViewProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
-	// 포트를 알아야 CSP/URL을 만들 수 있으므로 서버 먼저
+	// 포트를 알아야 player URL을 만들 수 있으므로 서버 먼저
 	let server;
 	try {
 		server = await startPlayerServer();
@@ -14,6 +14,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(server);
 
 	const provider = new PlayerViewProvider(context, server.port);
+	context.subscriptions.push(provider);
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(PlayerViewProvider.viewId, provider, {

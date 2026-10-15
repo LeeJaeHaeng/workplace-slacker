@@ -12,7 +12,7 @@ function playerHtml(videoId: string, autoplay: 0 | 1): string {
 	return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<style>html,body{margin:0;height:100%;background:#000}iframe{width:100%;height:100%;border:0}</style>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000}iframe{display:block;width:100%;height:100%;border:0}</style>
 </head><body>
 <iframe
   src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${autoplay}&enablejsapi=1&rel=0"
